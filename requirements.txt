@@ -1,14 +1,16 @@
 hydrogram
 tgcrypto
-motor  # Asynchronous MongoDB driver (Replaces pymongo for better performance)
-cinemagoer
-shortzy
+motor
 aiohttp
 aiofiles
+dnspython
+cinemagoer
+shortzy
 speedtest-cli
-uvloop
+apscheduler
+pytz
 requests
 qrcode
 Pillow
-pytz
-humanize # Optional: for readable time/size strings
+beautifulsoup4
+lxml
