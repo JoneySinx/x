@@ -1,0 +1,45 @@
+{
+  "name": "Auto Filter Bot",
+  "description": "A Telegram bot for auto-filtering movies.",
+  "repository": "https://github.com/HA-Bots/Auto-Filter-Bot",
+  "keywords": ["telegram", "bot", "filter", "automation"],
+  "buildpacks": [
+    {
+      "url": "heroku/python"
+    }
+  ],
+  "env": {
+    "BOT_TOKEN": {
+      "description": "Create a bot using @BotFather, and get the Telegram API token.",
+      "required": true
+    },
+    "API_ID": {
+      "description": "Get this value from telegram.org",
+      "required": true
+    },
+    "API_HASH": {
+      "description": "Get this value from telegram.org",
+      "required": true
+    },
+    "ADMINS": {
+      "description": "ID of Admins. (Multiple admins separated by space)",
+      "required": true
+    },
+    "FILES_DATABASE_URL": {
+      "description": "MongoDB URL for 1st files database.",
+      "required": true
+    },
+    "DATA_DATABASE_URL": {
+      "description": "MongoDB URL for save user, group, etc data.",
+      "required": true
+    },
+    "LOG_CHANNEL": {
+      "description": "A channel to log the activities of bot. Add channel ID and Make sure bot is admin.",
+      "required": true
+    },
+    "URL": {
+      "description": "Add your deployed bot app link or vps IP address.",
+      "required": true
+    }
+  }
+}
