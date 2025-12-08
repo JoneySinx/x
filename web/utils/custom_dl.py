@@ -6,12 +6,13 @@ from hydrogram.types import Message
 from utils import temp
 from hydrogram import Client, utils, raw
 from hydrogram.session import Session, Auth
-from hydrogram.errors import AuthBytesInvalid, TimeoutError, RPCError
+# FIX: TimeoutError को यहाँ से हटा दिया गया है क्योंकि यह Built-in है
+from hydrogram.errors import AuthBytesInvalid, RPCError
 from hydrogram.file_id import FileId, FileType, ThumbnailSource
 
 logger = logging.getLogger(__name__)
 
-# सेशन लॉक (Race conditions रोकने के लिए)
+# सेशन लॉक
 session_lock = asyncio.Lock()
 
 async def chunk_size(length):
@@ -135,9 +136,7 @@ class TGCustomYield:
 
         r = None
         
-        # ---------------------------------------------------------
-        # FIX: Stronger Retry Logic (5 Attempts)
-        # ---------------------------------------------------------
+        # Retry logic for initial request
         for attempt in range(5):
             try:
                 r = await media_session.send(
@@ -149,10 +148,10 @@ class TGCustomYield:
                 )
                 break
             except (TimeoutError, RPCError) as e:
-                if attempt == 4: # Last attempt
-                    logger.error(f"Failed to fetch initial chunk after 5 attempts: {e}")
+                if attempt == 4:
+                    logger.error(f"Failed to fetch initial chunk: {e}")
                     return
-                await asyncio.sleep(1) # Wait 1 second before retry
+                await asyncio.sleep(1)
                 continue
         
         if r is None:
@@ -175,7 +174,6 @@ class TGCustomYield:
                 current_part += 1
 
                 if current_part <= part_count:
-                    # Retry logic for subsequent chunks
                     success = False
                     for attempt in range(5):
                         try:
@@ -193,7 +191,7 @@ class TGCustomYield:
                             continue
                     
                     if not success:
-                        logger.error(f"Stream aborted: Could not fetch chunk {current_part} after 5 retries.")
+                        logger.error(f"Stream aborted: Failed chunk {current_part}")
                         break
 
     async def download_as_bytesio(self, media_msg: Message):
@@ -209,7 +207,6 @@ class TGCustomYield:
 
         while True:
             r = None
-            # Retry logic for download
             for attempt in range(5):
                 try:
                     r = await media_session.send(
