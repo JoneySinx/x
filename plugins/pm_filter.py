@@ -17,8 +17,10 @@ from Script import script
 from info import (
     IS_PREMIUM, PICS, TUTORIAL, SHORTLINK_API, SHORTLINK_URL, 
     RECEIPT_SEND_USERNAME, UPI_ID, UPI_NAME, PRE_DAY_AMOUNT, 
+    SECOND_FILES_DATABASE_URL,  # <-- यह जरूरी है
     ADMINS, URL, MAX_BTN, BIN_CHANNEL, IS_STREAM, DELETE_TIME, 
-    FILMS_LINK, LOG_CHANNEL, SUPPORT_GROUP, LANGUAGES, QUALITY
+    FILMS_LINK, LOG_CHANNEL, SUPPORT_GROUP, SUPPORT_LINK, 
+    UPDATES_LINK, LANGUAGES, QUALITY
 )
 from utils import (
     is_premium, get_size, is_subscribed, is_check_admin, get_wish, 
