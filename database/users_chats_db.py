@@ -1,21 +1,17 @@
 import datetime
 from motor.motor_asyncio import AsyncIOMotorClient
 from info import (
-    DATABASE_NAME, DATA_DATABASE_URL, FILES_DATABASE_URL, 
+    DATABASE_NAME, DATA_DATABASE_URL, 
     PROTECT_CONTENT, IMDB, SPELL_CHECK, 
     AUTO_DELETE, WELCOME, WELCOME_TEXT, IMDB_TEMPLATE, FILE_CAPTION, 
     SHORTLINK_URL, SHORTLINK_API, SHORTLINK, TUTORIAL, LINK_MODE, 
     VERIFY_EXPIRE, BOT_ID
 )
 
-# --- MongoDB Clients Setup ---
-# Main Data DB (Users, Chats, Settings)
-data_db_client = AsyncIOMotorClient(DATA_DATABASE_URL)
-data_db = data_db_client[DATABASE_NAME]
-
-# Files DB (Indexed Files)
-files_db_client = AsyncIOMotorClient(FILES_DATABASE_URL)
-files_db = files_db_client[DATABASE_NAME]
+# --- MongoDB Clients Setup (Single DB for All) ---
+# अब एक ही क्लाइंट (Client) सब कुछ संभालेगा
+mongo_client = AsyncIOMotorClient(DATA_DATABASE_URL)
+db_instance = mongo_client[DATABASE_NAME]
 
 class Database:
     default_setgs = {
@@ -50,12 +46,12 @@ class Database:
     }
 
     def __init__(self):
-        self.col = data_db.Users
-        self.grp = data_db.Groups
-        self.prm = data_db.Premiums
-        self.req = data_db.Requests
-        self.con = data_db.Connections
-        self.stg = data_db.Settings
+        self.col = db_instance.Users
+        self.grp = db_instance.Groups
+        self.prm = db_instance.Premiums
+        self.req = db_instance.Requests
+        self.con = db_instance.Connections
+        self.stg = db_instance.Settings
 
     def new_user(self, id, name):
         return dict(
@@ -79,20 +75,13 @@ class Database:
             settings=self.default_setgs
         )
     
-    # --- STORAGE STATS FUNCTION (NEW) ---
+    # --- STORAGE STATS FUNCTION (SINGLE DB) ---
     async def get_db_size(self):
         try:
-            # Get stats for both databases
-            files_stats = await files_db.command("dbstats")
-            data_stats = await data_db.command("dbstats")
-            
-            # Calculate total used size in bytes
-            used = files_stats.get('dataSize', 0) + data_stats.get('dataSize', 0)
-            
-            # MongoDB Atlas Free Tier Limit is 512 MB (536,870,912 bytes)
-            limit = 536870912 
+            stats = await db_instance.command("dbstats")
+            used = stats.get('dataSize', 0)
+            limit = 536870912 # 512 MB Free Tier Limit
             free = limit - used
-            
             return used, free
         except Exception:
             return 0, 0
@@ -110,28 +99,17 @@ class Database:
         return count
     
     async def remove_ban(self, id):
-        ban_status = dict(
-            is_banned=False,
-            ban_reason=''
-        )
+        ban_status = dict(is_banned=False, ban_reason='')
         await self.col.update_one({'id': id}, {'$set': {'ban_status': ban_status}})
     
     async def ban_user(self, user_id, ban_reason="No Reason"):
-        ban_status = dict(
-            is_banned=True,
-            ban_reason=ban_reason
-        )
+        ban_status = dict(is_banned=True, ban_reason=ban_reason)
         await self.col.update_one({'id': user_id}, {'$set': {'ban_status': ban_status}})
 
     async def get_ban_status(self, id):
-        default = dict(
-            is_banned=False,
-            ban_reason=''
-        )
+        default = dict(is_banned=False, ban_reason='')
         user = await self.col.find_one({'id':int(id)})
-        if not user:
-            return default
-        return user.get('ban_status', default)
+        return user.get('ban_status', default) if user else default
 
     async def get_all_users(self):
         return self.col.find({})
@@ -158,10 +136,7 @@ class Database:
         return False if not chat else chat.get('chat_status')
     
     async def re_enable_chat(self, id):
-        chat_status=dict(
-            is_disabled=False,
-            reason="",
-            )
+        chat_status=dict(is_disabled=False, reason="")
         await self.grp.update_one({'id': int(id)}, {'$set': {'chat_status': chat_status}})
         
     async def update_settings(self, id, settings):
@@ -169,23 +144,15 @@ class Database:
     
     async def get_settings(self, id):
         chat = await self.grp.find_one({'id':int(id)})
-        if chat:
-            return chat.get('settings', self.default_setgs)
-        return self.default_setgs
+        return chat.get('settings', self.default_setgs) if chat else self.default_setgs
     
     async def disable_chat(self, chat, reason="No Reason"):
-        chat_status=dict(
-            is_disabled=True,
-            reason=reason,
-            )
+        chat_status=dict(is_disabled=True, reason=reason)
         await self.grp.update_one({'id': int(chat)}, {'$set': {'chat_status': chat_status}})
     
     async def get_verify_status(self, user_id):
         user = await self.col.find_one({'id':int(user_id)})
-        if user:
-            info = user.get('verify_status', self.default_verify)
-            return info
-        return self.default_verify
+        return user.get('verify_status', self.default_verify) if user else self.default_verify
         
     async def update_verify_status(self, user_id, verify_token="", is_verified=False, link="", expire_time=0):
         current = await self.get_verify_status(user_id)
@@ -197,27 +164,17 @@ class Database:
         await self.col.update_one({'id': int(user_id)}, {'$set': {'verify_status': current}})
     
     async def total_chat_count(self):
-        count = await self.grp.count_documents({})
-        return count
+        return await self.grp.count_documents({})
     
     async def get_all_chats(self):
         return self.grp.find({})
     
-    async def get_files_db_size(self):
-        return (await files_db.command("dbstats"))['dataSize']
-    
-    async def get_data_db_size(self):
-        return (await data_db.command("dbstats"))['dataSize']
-    
     async def get_all_chats_count(self):
-        grp = await self.grp.count_documents({})
-        return grp
+        return await self.grp.count_documents({})
     
     async def get_plan(self, id):
         st = await self.prm.find_one({'id': id})
-        if st:
-            return st['status']
-        return self.default_prm
+        return st['status'] if st else self.default_prm
     
     async def update_plan(self, id, data):
         if not await self.prm.find_one({'id': id}):
@@ -240,10 +197,7 @@ class Database:
 
     async def get_connections(self, user_id):
         user = await self.con.find_one({'_id': user_id})
-        if user:
-            return user["group_ids"]
-        else:
-            return []
+        return user["group_ids"] if user else []
         
     async def update_bot_sttgs(self, var, val):
         if not await self.stg.find_one({'id': BOT_ID}):
