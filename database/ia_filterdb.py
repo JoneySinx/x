@@ -6,21 +6,48 @@ from hydrogram.file_id import FileId
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import TEXT
 from pymongo.errors import DuplicateKeyError
-# IMPORTANT: Importing DATA_DATABASE_URL, not FILES_DATABASE_URL
 from info import DATA_DATABASE_URL, DATABASE_NAME, COLLECTION_NAME, MAX_BTN
 
 logger = logging.getLogger(__name__)
 
-# Using the SAME database URL as the main data
+# Single Database Connection
 client = AsyncIOMotorClient(DATA_DATABASE_URL)
 db = client[DATABASE_NAME]
 collection = db[COLLECTION_NAME]
 
 async def save_file(media):
-    """Save file in database"""
+    """Save file in database with Advanced Cleaning"""
     file_id = unpack_new_file_id(media.file_id)
-    file_name = re.sub(r"@\w+|(_|\-|\.|\+)", " ", str(media.file_name))
-    file_caption = re.sub(r"@\w+|(_|\-|\.|\+)", " ", str(media.caption))
+    
+    # --- ADVANCED FILENAME CLEANING ---
+    original_name = str(media.file_name or "")
+    
+    # 1. Replace dots, underscores, hyphens, plus with space
+    clean_name = re.sub(r"[\.\+\-_]", " ", original_name)
+    
+    # 2. Remove @usernames
+    clean_name = re.sub(r"@\w+", "", clean_name)
+    
+    # 3. Remove content inside brackets: [720p], (2024), {Dual}
+    clean_name = re.sub(r"[\[\(\{].*?[\]\}\)]", "", clean_name)
+    
+    # 4. Remove file extensions (MKV, MP4, AVI, etc.) - ENABLED
+    clean_name = re.sub(r"\b(mkv|mp4|avi|m4v|webm|flv)\b", "", clean_name, flags=re.IGNORECASE)
+    
+    # 5. Collapse multiple spaces into one
+    clean_name = re.sub(r"\s+", " ", clean_name)
+    
+    # 6. Final cleanup: Strip spaces and convert to Lowercase
+    file_name = clean_name.strip().lower()
+    
+    # --- CAPTION CLEANING ---
+    original_caption = str(media.caption or "")
+    clean_caption = re.sub(r"[\.\+\-_]", " ", original_caption)
+    clean_caption = re.sub(r"@\w+", "", clean_caption)
+    clean_caption = re.sub(r"[\[\(\{].*?[\]\}\)]", "", clean_caption)
+    clean_caption = re.sub(r"\b(mkv|mp4|avi|m4v|webm|flv)\b", "", clean_caption, flags=re.IGNORECASE)
+    clean_caption = re.sub(r"\s+", " ", clean_caption)
+    file_caption = clean_caption.strip().lower()
     
     document = {
         '_id': file_id,
@@ -40,11 +67,19 @@ async def save_file(media):
         return 'err'
 
 async def get_search_results(query, max_results=MAX_BTN, offset=0, lang=None):
-    query = str(query).strip()
+    # Search query को भी clean करें
+    query = str(query).strip().lower()
+    query = re.sub(r"[\.\+\-_]", " ", query)
+    query = re.sub(r"\s+", " ", query).strip()
+
     if not query:
         return [], "", 0
 
-    filter = {'$text': {'$search': query}} 
+    if lang:
+        search_query = f'"{query}" "{lang}"' 
+        filter = {'$text': {'$search': search_query}}
+    else:
+        filter = {'$text': {'$search': query}} 
     
     try:
         total_results = await collection.count_documents(filter)
@@ -98,7 +133,6 @@ def unpack_new_file_id(new_file_id):
 async def db_count_documents():
      return await collection.count_documents({})
 
-# Keep dummy function for compatibility with commands.py
 async def second_db_count_documents():
      return 0
 
