@@ -4,6 +4,7 @@ import math
 import logging
 import qrcode
 import os
+import urllib.parse
 from time import time as time_now
 from hydrogram.errors import ListenerTimeout, MessageNotModified
 from datetime import datetime
@@ -158,8 +159,16 @@ async def auto_filter(client, msg, s, spoll=False):
     search = re.sub(r"\s+", " ", re.sub(r"[-:\"';!]", " ", message.text)).strip()
     files, offset, total_results = await get_search_results(search)
     
+    # --- GOOGLE SPELL CHECK ---
     if not files:
-        await s.edit(f'<b>❌ No results found for:</b> <code>{search}</code>')
+        google_search_url = f"https://www.google.com/search?q={urllib.parse.quote(search)}"
+        btn = [[InlineKeyboardButton("🔍 Check Spelling on Google", url=google_search_url)]]
+        await s.edit(
+            f'<b>❌ No results found for:</b> <code>{search}</code>\n\n'
+            f'<i>Please check your spelling on Google and try again.</i>',
+            reply_markup=InlineKeyboardMarkup(btn),
+            parse_mode=enums.ParseMode.HTML
+        )
         return
 
     req = message.from_user.id if message.from_user else 0
@@ -190,9 +199,29 @@ async def auto_filter(client, msg, s, spoll=False):
     del_msg = f"\n\n<b>⚠️ Auto Delete in <code>{get_readable_time(DELETE_TIME)}</code></b>" if settings["auto_delete"] else ''
     cap = f"<b>✅ Results for:</b> <i>{search}</i>\n<b>📂 Total:</b> {total_results}\n{files_link}"
 
-    await s.edit_text(cap + del_msg, reply_markup=InlineKeyboardMarkup(btn), parse_mode=enums.ParseMode.HTML)
+    k = await s.edit_text(cap + del_msg, reply_markup=InlineKeyboardMarkup(btn), parse_mode=enums.ParseMode.HTML)
+    
+    # --- AUTO DELETE & GONE MESSAGE LOGIC (12 HOURS) ---
+    if settings["auto_delete"]:
+        await asyncio.sleep(DELETE_TIME)
+        try: await k.delete()
+        except: pass
+        try: await message.delete()
+        except: pass
+        
+        # Send "Gone" message
+        # Use offset 0 if not available to restart from beginning
+        btn_data = f"next_{req}_{key}_{offset if offset else 0}"
+        btn = [[InlineKeyboardButton("Get File Again", callback_data=btn_data)]]
+        
+        gone_msg = await message.reply("<b>Tʜᴇ ғɪʟᴇ ʜᴀs ʙᴇᴇɴ ɢᴏɴᴇ ! Cʟɪᴄᴋ ɢɪᴠᴇɴ ʙᴜᴛᴛᴏɴ ᴛᴏ ɢᴇᴛ ɪᴛ ᴀɢᴀɪɴ.</b>", reply_markup=InlineKeyboardMarkup(btn))
+        
+        # Delete "Gone" message after 12 Hours
+        await asyncio.sleep(43200) 
+        try: await gone_msg.delete()
+        except: pass
 
-# --- QUALITY BUTTON HANDLER ---
+# --- QUALITY HANDLERS ---
 @Client.on_callback_query(filters.regex(r"^quality"))
 async def quality(client: Client, query: CallbackQuery):
     _, key, req, offset = query.data.split("#")
@@ -209,10 +238,8 @@ async def quality(client: Client, query: CallbackQuery):
         btn.append(row)
         
     btn.append([InlineKeyboardButton("⪻ BACK", callback_data=f"next_{req}_{key}_{offset}")])
-    
     await query.message.edit_text("<b>🔽 Select Quality:</b>", reply_markup=InlineKeyboardMarkup(btn), parse_mode=enums.ParseMode.HTML)
 
-# --- QUALITY SEARCH HANDLER ---
 @Client.on_callback_query(filters.regex(r"^qual_search"))
 async def quality_search(client: Client, query: CallbackQuery):
     _, qual, key, offset, req = query.data.split("#")
@@ -246,7 +273,7 @@ async def quality_search(client: Client, query: CallbackQuery):
     
     await query.message.edit_text(cap, reply_markup=InlineKeyboardMarkup(btn), parse_mode=enums.ParseMode.HTML)
 
-# --- CALLBACK HANDLERS ---
+# --- MAIN CALLBACK HANDLER ---
 
 @Client.on_callback_query()
 async def cb_handler(client: Client, query: CallbackQuery):
@@ -278,6 +305,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
         ]]
         await query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup(btn))
 
+    # --- ACTIVATE PLAN ---
     elif query.data == 'activate_plan':
         q = await query.message.edit("<b>📅 How many days do you want to buy Premium?</b>\n\n<i>Send the number of days (e.g., 30, 365)</i>")
         try:
@@ -313,10 +341,8 @@ async def cb_handler(client: Client, query: CallbackQuery):
         try:
             receipt = await client.listen(chat_id=query.message.chat.id, user_id=query.from_user.id, timeout=600)
             if receipt.photo or receipt.document:
-                # --- Send to Admin with Confirm Button ---
-                btn = [[
-                    InlineKeyboardButton(f"✅ Confirm Payment ({days} Days)", callback_data=f"confirm_pay#{query.from_user.id}#{days}")
-                ]]
+                # Send to Admin with Confirm Button
+                btn = [[InlineKeyboardButton(f"✅ Confirm Payment ({days} Days)", callback_data=f"confirm_pay#{query.from_user.id}#{days}")]]
                 await receipt.copy(
                     chat_id=RECEIPT_SEND_USERNAME, 
                     caption=f"<b>💰 New Payment Received!</b>\n\n👤 <b>User:</b> {query.from_user.mention}\n🆔 <b>ID:</b> <code>{query.from_user.id}</code>\n🗓 <b>Requested Plan:</b> {days} Days",
@@ -367,12 +393,15 @@ async def cb_handler(client: Client, query: CallbackQuery):
         users = await db.total_users_count()
         chats = await db.total_chat_count()
         prm = await db.get_premium_count()
+        
+        # New Storage & Uptime Logic
         used_bytes, free_bytes = await db.get_db_size()
         used = get_size(used_bytes)
         free = get_size(free_bytes)
         uptime = get_readable_time(time_now() - temp.START_TIME)
+        
         buttons = [[InlineKeyboardButton('🏄 Back', callback_data='start')]]
-        await query.message.edit_text(script.STATUS_TXT.format(users, prm, chats, files, used, free, uptime), reply_markup=InlineKeyboardMarkup(buttons))
+        await query.message.edit_text(script.STATUS_TXT.format(files, users, chats, prm, used, free, uptime), reply_markup=InlineKeyboardMarkup(buttons))
 
     elif query.data.startswith("bool_setgs"):
         ident, set_type, status, grp_id = query.data.split("#")
@@ -401,6 +430,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
         await query.answer(url=f"https://t.me/{temp.U_NAME}?start={mc}")
         await query.message.delete()
     
+    # --- DELETE HANDLERS ---
     elif query.data == "delete_all":
         await query.message.edit("Deleting all files... This may take a while.")
         total = await delete_files("") 
