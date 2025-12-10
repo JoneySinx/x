@@ -8,10 +8,11 @@ from info import (
     VERIFY_EXPIRE, BOT_ID
 )
 
+# --- MongoDB Clients Setup (Single DB for All) ---
 mongo_client = AsyncIOMotorClient(DATA_DATABASE_URL)
 db_instance = mongo_client[DATABASE_NAME]
 
-# Aliases
+# Aliases for compatibility (files and users data in same DB)
 files_db = db_instance
 data_db = db_instance
 
@@ -32,8 +33,20 @@ class Database:
         'links': LINK_MODE
     }
 
-    default_verify = {'is_verified': False, 'verified_time': 0, 'verify_token': "", 'link': "", 'expire_time': 0}
-    default_prm = {'expire': '', 'trial': False, 'plan': '', 'premium': False}
+    default_verify = {
+        'is_verified': False,
+        'verified_time': 0,
+        'verify_token': "",
+        'link': "",
+        'expire_time': 0
+    }
+    
+    default_prm = {
+        'expire': '',
+        'trial': False,
+        'plan': '',
+        'premium': False
+    }
 
     def __init__(self):
         self.col = db_instance.Users
@@ -42,16 +55,45 @@ class Database:
         self.req = db_instance.Requests
         self.con = db_instance.Connections
         self.stg = db_instance.Settings
+        # New Collections for added features
         self.filters = db_instance.Filters
         self.note = db_instance.Notes
 
     def new_user(self, id, name):
-        return dict(id=id, name=name, ban_status=dict(is_banned=False, ban_reason=""), verify_status=self.default_verify)
+        return dict(
+            id = id,
+            name = name,
+            ban_status=dict(
+                is_banned=False,
+                ban_reason="",
+            ),
+            verify_status=self.default_verify
+        )
 
     def new_group(self, id, title):
-        return dict(id=id, title=title, chat_status=dict(is_disabled=False, reason=""), settings=self.default_setgs)
+        return dict(
+            id = id,
+            title = title,
+            chat_status=dict(
+                is_disabled=False,
+                reason="",
+            ),
+            settings=self.default_setgs
+        )
     
-    # --- INDEX CHANNEL FUNCTIONS (CRITICAL FOR /add_channel) ---
+    # --- STORAGE STATS FUNCTION ---
+    async def get_db_size(self):
+        try:
+            stats = await db_instance.command("dbstats")
+            used = stats.get('dataSize', 0)
+            # MongoDB Free Tier Limit approx 512 MB
+            limit = 536870912 
+            free = limit - used
+            return used, free
+        except Exception:
+            return 0, 0
+
+    # --- DYNAMIC INDEX CHANNEL FUNCTIONS ---
     async def add_index_channel(self, chat_id):
         await self.stg.update_one(
             {'id': BOT_ID},
@@ -69,62 +111,73 @@ class Database:
         doc = await self.stg.find_one({'id': BOT_ID})
         return doc.get('index_channels', []) if doc else []
 
-    # --- STORAGE STATS ---
-    async def get_db_size(self):
-        try:
-            stats = await db_instance.command("dbstats")
-            used = stats.get('dataSize', 0)
-            limit = 536870912 
-            free = limit - used
-            return used, free
-        except: return 0, 0
-
-    # --- FILTERS & NOTES ---
+    # --- FILTERS FUNCTIONS ---
     async def add_filter(self, chat_id, name, filter_data):
-        await self.filters.update_one({'chat_id': int(chat_id), 'name': name.lower()}, {'$set': {'data': filter_data}}, upsert=True)
+        name = name.lower()
+        await self.filters.update_one(
+            {'chat_id': int(chat_id), 'name': name},
+            {'$set': {'data': filter_data}},
+            upsert=True
+        )
 
     async def get_filter(self, chat_id, name):
-        doc = await self.filters.find_one({'chat_id': int(chat_id), 'name': name.lower()})
+        name = name.lower()
+        doc = await self.filters.find_one({'chat_id': int(chat_id), 'name': name})
         return doc['data'] if doc else None
 
     async def delete_filter(self, chat_id, name):
-        await self.filters.delete_one({'chat_id': int(chat_id), 'name': name.lower()})
+        name = name.lower()
+        await self.filters.delete_one({'chat_id': int(chat_id), 'name': name})
 
     async def get_all_filters(self, chat_id):
         return self.filters.find({'chat_id': int(chat_id)})
 
+    # --- NOTES FUNCTIONS ---
     async def save_note(self, chat_id, name, note_data):
-        await self.note.update_one({'chat_id': int(chat_id), 'name': name.lower()}, {'$set': {'note': note_data}}, upsert=True)
+        name = name.lower()
+        await self.note.update_one(
+            {'chat_id': int(chat_id), 'name': name},
+            {'$set': {'note': note_data}},
+            upsert=True
+        )
 
     async def get_note(self, chat_id, name):
-        doc = await self.note.find_one({'chat_id': int(chat_id), 'name': name.lower()})
+        name = name.lower()
+        doc = await self.note.find_one({'chat_id': int(chat_id), 'name': name})
         return doc['note'] if doc else None
 
     async def delete_note(self, chat_id, name):
-        await self.note.delete_one({'chat_id': int(chat_id), 'name': name.lower()})
+        name = name.lower()
+        await self.note.delete_one({'chat_id': int(chat_id), 'name': name})
 
     async def get_all_notes(self, chat_id):
         return self.note.find({'chat_id': int(chat_id)})
 
-    # --- BASIC FUNCTIONS ---
+    # --- USER & CHAT MANAGEMENT ---
     async def add_user(self, id, name):
-        await self.col.insert_one(self.new_user(id, name))
+        user = self.new_user(id, name)
+        await self.col.insert_one(user)
     
     async def is_user_exist(self, id):
-        return bool(await self.col.find_one({'id':int(id)}))
+        user = await self.col.find_one({'id':int(id)})
+        return bool(user)
     
     async def total_users_count(self):
-        return await self.col.count_documents({})
+        count = await self.col.count_documents({})
+        return count
     
     async def remove_ban(self, id):
-        await self.col.update_one({'id': id}, {'$set': {'ban_status': dict(is_banned=False, ban_reason='')}})
+        ban_status = dict(is_banned=False, ban_reason='')
+        await self.col.update_one({'id': id}, {'$set': {'ban_status': ban_status}})
     
     async def ban_user(self, user_id, ban_reason="No Reason"):
-        await self.col.update_one({'id': user_id}, {'$set': {'ban_status': dict(is_banned=True, ban_reason=ban_reason)}})
+        ban_status = dict(is_banned=True, ban_reason=ban_reason)
+        await self.col.update_one({'id': user_id}, {'$set': {'ban_status': ban_status}})
 
     async def get_ban_status(self, id):
+        default = dict(is_banned=False, ban_reason='')
         user = await self.col.find_one({'id':int(id)})
-        return user.get('ban_status', dict(is_banned=False, ban_reason='')) if user else dict(is_banned=False, ban_reason='')
+        return user.get('ban_status', default) if user else default
 
     async def get_all_users(self):
         return self.col.find({})
@@ -143,14 +196,16 @@ class Database:
         return b_users, b_chats
     
     async def add_chat(self, chat, title):
-        await self.grp.insert_one(self.new_group(chat, title))
+        chat = self.new_group(chat, title)
+        await self.grp.insert_one(chat)
 
     async def get_chat(self, chat):
         chat = await self.grp.find_one({'id':int(chat)})
         return False if not chat else chat.get('chat_status')
     
     async def re_enable_chat(self, id):
-        await self.grp.update_one({'id': int(id)}, {'$set': {'chat_status': dict(is_disabled=False, reason="")}})
+        chat_status=dict(is_disabled=False, reason="")
+        await self.grp.update_one({'id': int(id)}, {'$set': {'chat_status': chat_status}})
         
     async def update_settings(self, id, settings):
         await self.grp.update_one({'id': int(id)}, {'$set': {'settings': settings}})      
@@ -160,7 +215,8 @@ class Database:
         return chat.get('settings', self.default_setgs) if chat else self.default_setgs
     
     async def disable_chat(self, chat, reason="No Reason"):
-        await self.grp.update_one({'id': int(chat)}, {'$set': {'chat_status': dict(is_disabled=True, reason=reason)}})
+        chat_status=dict(is_disabled=True, reason=reason)
+        await self.grp.update_one({'id': int(chat)}, {'$set': {'chat_status': chat_status}})
     
     async def get_verify_status(self, user_id):
         user = await self.col.find_one({'id':int(user_id)})
