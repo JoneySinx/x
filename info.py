@@ -47,7 +47,7 @@ except ValueError:
     logger.error('BOT_TOKEN is invalid, exiting now')
     exit(1)
 
-# Single Database URL for EVERYTHING
+# Single Database URL (Files + Data merged)
 DATA_DATABASE_URL = environ.get('DATA_DATABASE_URL', "")
 if not DATA_DATABASE_URL.startswith('mongodb'):
     logger.error('DATA_DATABASE_URL is missing or invalid, exiting now')
@@ -101,6 +101,7 @@ PORT = int(environ.get('PORT', '8080'))
 DATABASE_NAME = environ.get('DATABASE_NAME', "Cluster0")
 COLLECTION_NAME = environ.get('COLLECTION_NAME', 'Files')
 
+# Index Channels (Env Variable - Static)
 INDEX_CHANNELS = [int(ch) if ch.lstrip('-').isdigit() else ch for ch in environ.get('INDEX_CHANNELS', '').split()]
 
 SUPPORT_LINK = environ.get('SUPPORT_LINK', 'https://t.me/YourXCloud')
@@ -112,37 +113,43 @@ VERIFY_TUTORIAL = environ.get("VERIFY_TUTORIAL", "https://t.me/YourX")
 PICS = environ.get('PICS', 'https://i.postimg.cc/8C15CQ5y/1.png https://i.postimg.cc/gcNtrv0m/2.png').split()
 
 TIME_ZONE = environ.get('TIME_ZONE', 'Asia/Kolkata')
-DELETE_TIME = int(environ.get('DELETE_TIME', 3600))
+DELETE_TIME = int(environ.get('DELETE_TIME', 300)) # 5 Minutes Default
+PM_FILE_DELETE_TIME = int(environ.get('PM_FILE_DELETE_TIME', 43200)) # 12 Hours Default
 CACHE_TIME = int(environ.get('CACHE_TIME', 300))
-MAX_BTN = int(environ.get('MAX_BTN', 10))
+MAX_BTN = int(environ.get('MAX_BTN', 10)) # Fixed to 10
 VERIFY_EXPIRE = int(environ.get('VERIFY_EXPIRE', 86400))
-PM_FILE_DELETE_TIME = int(environ.get('PM_FILE_DELETE_TIME', '3600'))
 
-SHORTLINK_URL = environ.get("SHORTLINK_URL", "mdiskshortner.link")
-SHORTLINK_API = environ.get("SHORTLINK_API", "your_api_key_here")
-
-IMDB_TEMPLATE = environ.get("IMDB_TEMPLATE", script.IMDB_TEMPLATE)
-FILE_CAPTION = environ.get("FILE_CAPTION", script.FILE_CAPTION)
-WELCOME_TEXT = environ.get("WELCOME_TEXT", script.WELCOME_TEXT)
-
+# --- FEATURES (Toggles) ---
+IS_STREAM = is_enabled('IS_STREAM', True)
+PROTECT_CONTENT = is_enabled('PROTECT_CONTENT', True)
 USE_CAPTION_FILTER = is_enabled('USE_CAPTION_FILTER', True)
 IS_VERIFY = is_enabled('IS_VERIFY', True)
 AUTO_DELETE = is_enabled('AUTO_DELETE', False)
 WELCOME = is_enabled('WELCOME', False)
-PROTECT_CONTENT = is_enabled('PROTECT_CONTENT', True)
-LONG_IMDB_DESCRIPTION = is_enabled("LONG_IMDB_DESCRIPTION", False)
-LINK_MODE = is_enabled("LINK_MODE", True)
-IMDB = is_enabled('IMDB', False)
 SPELL_CHECK = is_enabled("SPELL_CHECK", True)
-SHORTLINK = is_enabled('SHORTLINK', True)
-IS_STREAM = is_enabled('IS_STREAM', True)
+LINK_MODE = is_enabled("LINK_MODE", True)
 
+# --- QUALITY & LANGUAGE (Required for Buttons) ---
 LANGUAGES = [lang.lower() for lang in environ.get('LANGUAGES', 'hindi english telugu tamil kannada malayalam marathi punjabi').split()]
 QUALITY = [quality.lower() for quality in environ.get('QUALITY', '360p 480p 720p 1080p 1440p 2160p').split()]
 
+# --- DISABLED/REMOVED FEATURES (Kept Variables to prevent Import Errors in DB files) ---
+IMDB = is_enabled('IMDB', False) # Disabled
+SHORTLINK = is_enabled('SHORTLINK', False) # Disabled
+SHORTLINK_URL = environ.get("SHORTLINK_URL", "")
+SHORTLINK_API = environ.get("SHORTLINK_API", "")
+LONG_IMDB_DESCRIPTION = is_enabled("LONG_IMDB_DESCRIPTION", False)
+
+# --- TEMPLATES (Using defaults from Script.py) ---
+IMDB_TEMPLATE = environ.get("IMDB_TEMPLATE", script.IMDB_TEMPLATE)
+FILE_CAPTION = environ.get("FILE_CAPTION", script.FILE_CAPTION)
+WELCOME_TEXT = environ.get("WELCOME_TEXT", script.WELCOME_TEXT)
+
+# --- COSMETICS ---
 REACTIONS = [reactions for reactions in environ.get('REACTIONS', '🤝 😇 🤗 😍 👍 🎅 😐 🥰 🤩 😱 🤣 😘 👏 😛 😈 🎉 ⚡️ 🫡 🤓 😎 🏆 🔥 🤭 🌚 🆒 👻 😁').split()]
 STICKERS = [sticker for sticker in environ.get('STICKERS', 'CAACAgIAAxkBAAEN4ctnu1NdZUe21tiqF1CjLCZW8rJ28QACmQwAAj9UAUrPkwx5a8EilDYE').split()]
 
+# --- PREMIUM SYSTEM ---
 IS_PREMIUM = is_enabled('IS_PREMIUM', True)
 PRE_DAY_AMOUNT = int(environ.get('PRE_DAY_AMOUNT', '10'))
 UPI_ID = environ.get("UPI_ID", "YourX@SBI")
