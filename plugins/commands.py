@@ -61,10 +61,12 @@ async def start(client, message):
         
         wish = get_wish()
         user = message.from_user.mention if message.from_user else "Dear"
+        
+        # --- SUPPORT GROUP REMOVED ---
         btn = [[
-            InlineKeyboardButton('⚡️ ᴜᴘᴅᴀᴛᴇs ᴄʜᴀɴɴᴇʟ ⚡️', url=UPDATES_LINK),
-            InlineKeyboardButton('💡 sᴜᴘᴘᴏʀᴛ ɢʀᴏᴜᴘ 💡', url=SUPPORT_LINK)
+            InlineKeyboardButton('⚡️ ᴜᴘᴅᴀᴛᴇs ᴄʜᴀɴɴᴇʟ ⚡️', url=UPDATES_LINK)
         ]]
+        
         await message.reply(text=f"<b>ʜᴇʏ {user}, <i>{wish}</i>\nʜᴏᴡ ᴄᴀɴ ɪ ʜᴇʟᴘ ʏᴏᴜ??</b>", reply_markup=InlineKeyboardMarkup(btn))
         return 
         
@@ -92,27 +94,18 @@ async def start(client, message):
         return
 
     mc = message.command[1]
-
-    if mc == 'premium':
-        return await plan(client, message)
+    if mc == 'premium': return await plan(client, message)
     
     if mc.startswith('settings'):
         _, group_id = message.command[1].split("_")
-        if not await is_check_admin(client, int(group_id), message.from_user.id):
-            return await message.reply("You not admin in this group.")
+        if not await is_check_admin(client, int(group_id), message.from_user.id): return await message.reply("You not admin.")
         btn = await get_grp_stg(int(group_id))
-        chat = await client.get_chat(int(group_id))
-        return await message.reply(f"Change your settings for <b>'{chat.title}'</b> as your wish. ⚙", reply_markup=InlineKeyboardMarkup(btn), parse_mode=enums.ParseMode.HTML)
+        return await message.reply(f"Settings for <b>'{group_id}'</b>", reply_markup=InlineKeyboardMarkup(btn))
 
     btn = await is_subscribed(client, message)
     if btn:
         btn.append([InlineKeyboardButton("🔁 Try Again 🔁", callback_data=f"checksub#{mc}")])
-        await message.reply_photo(
-            photo=random.choice(PICS),
-            caption=f"👋 Hello {message.from_user.mention},\n\nPlease join my 'Updates Channel' and try again. 😇",
-            reply_markup=reply_markup,
-            parse_mode=enums.ParseMode.HTML
-        )
+        await message.reply_photo(photo=random.choice(PICS), caption=f"👋 Hello {message.from_user.mention},\nPlease join my 'Updates Channel'.", reply_markup=InlineKeyboardMarkup(btn))
         return 
         
     if mc.startswith('all'):
@@ -244,101 +237,41 @@ async def link(bot, message):
         await message.reply('Here is your link', reply_markup=InlineKeyboardMarkup(btn))
     except Exception as e: await message.reply(f'Error: {e}')
 
-# --- INDEX CHANNELS (Dynamic + Static) ---
 @Client.on_message(filters.command('index_channels'))
 async def channels_info(bot, message):
-    if message.from_user.id not in ADMINS:
-        await message.delete()
-        return
-    
-    # 1. Get ENV Channels
+    if message.from_user.id not in ADMINS: return
     env_ids = INDEX_CHANNELS
-    # 2. Get DB Channels
     db_ids = await db.get_index_channels_db()
-    # 3. Merge & Remove Duplicates
     all_ids = list(set(env_ids + db_ids))
-
-    if not all_ids: return await message.reply("Not set INDEX_CHANNELS")
-    
+    if not all_ids: return await message.reply("No Index Channels")
     text = '**Indexed Channels:**\n\n'
     for id in all_ids:
         try:
             chat = await bot.get_chat(id)
             text += f'• {chat.title} (`{id}`)\n'
         except: text += f'• Unknown (`{id}`)\n'
-    text += f'\n**Total:** {len(all_ids)}'
     await message.reply(text)
 
-# --- ADD INDEX CHANNEL (NEW) ---
 @Client.on_message(filters.command('add_channel') & filters.user(ADMINS))
 async def add_index_channel_cmd(client, message):
-    if len(message.command) < 2:
-        return await message.reply("Usage: `/add_channel -100xxxxxx`")
-    try:
-        chat_id = int(message.command[1])
-    except ValueError:
-        return await message.reply("Invalid Chat ID!")
-    
+    if len(message.command) < 2: return await message.reply("Usage: `/add_channel -100xxxxxx`")
+    try: chat_id = int(message.command[1])
+    except: return await message.reply("Invalid Chat ID!")
     try:
         chat = await client.get_chat(chat_id)
-        me = await client.get_chat_member(chat_id, "me")
-        if me.status != enums.ChatMemberStatus.ADMINISTRATOR:
-            return await message.reply(f"❌ I am not Admin in <b>{chat.title}</b>.")
-    except Exception as e:
-        return await message.reply(f"❌ Error: Could not access chat.\nError: {e}")
-
+        if chat.type != enums.ChatType.CHANNEL: return await message.reply("Only Channels Supported!")
+    except: return await message.reply("Make me admin in that channel first!")
+    
     await db.add_index_channel(chat_id)
-    await message.reply(f"✅ Successfully Added:\n<b>{chat.title}</b> (`{chat_id}`)")
+    await message.reply(f"✅ Added: {chat.title}")
 
-# --- REMOVE INDEX CHANNEL (NEW) ---
 @Client.on_message(filters.command('remove_channel') & filters.user(ADMINS))
 async def remove_index_channel_cmd(client, message):
-    if len(message.command) < 2:
-        return await message.reply("Usage: `/remove_channel -100xxxxxx`")
-    try:
-        chat_id = int(message.command[1])
-    except ValueError:
-        return await message.reply("Invalid Chat ID!")
-
+    if len(message.command) < 2: return await message.reply("Usage: `/remove_channel -100xxxxxx`")
+    try: chat_id = int(message.command[1])
+    except: return await message.reply("Invalid ID")
     await db.remove_index_channel(chat_id)
-    await message.reply(f"🗑 Successfully Removed: `{chat_id}`")
-
-@Client.on_message(filters.command('settings'))
-async def settings(client, message):
-    group_id = message.chat.id
-    if message.chat.type in [enums.ChatType.GROUP, enums.ChatType.SUPERGROUP]:
-        if not await is_check_admin(client, group_id, message.from_user.id):
-            return await message.reply_text('You not admin in this group.')
-        btn = [[InlineKeyboardButton("Open Here", callback_data='open_group_settings'), InlineKeyboardButton("Open In PM", callback_data='open_pm_settings')]]
-        await message.reply_text('Where do you want to open the settings menu?', reply_markup=InlineKeyboardMarkup(btn))
-    elif message.chat.type == enums.ChatType.PRIVATE:
-        cons = await db.get_connections(message.from_user.id)
-        if not cons: return await message.reply_text("No groups found! Use this command group and open in PM")
-        buttons = []
-        for con in cons:
-            try:
-                chat = await client.get_chat(con)
-                buttons.append([InlineKeyboardButton(text=chat.title, callback_data=f'back_setgs#{chat.id}')])
-            except: pass
-        await message.reply_text('Select the group whose settings you want to change.', reply_markup=InlineKeyboardMarkup(buttons))
-
-@Client.on_message(filters.command('connect'))
-async def connect(client, message):
-    if message.chat.type in [enums.ChatType.GROUP, enums.ChatType.SUPERGROUP]:
-        group_id = message.chat.id
-        await db.add_connect(group_id, message.from_user.id)
-        await message.reply_text('Successfully connected this group to PM.')
-    elif message.chat.type == enums.ChatType.PRIVATE:
-        if len(message.command) > 1:
-            group_id = message.command[1]
-            try:
-                if not await is_check_admin(client, int(group_id), message.from_user.id):
-                    return await message.reply_text('You not admin in this group.')
-                chat = await client.get_chat(int(group_id))
-                await db.add_connect(int(group_id), message.from_user.id)
-                await message.reply_text(f'Successfully connected {chat.title} group to PM')
-            except Exception as e: await message.reply_text(f'Error: {e}')
-        else: await message.reply_text('Usage: /connect group_id\nor use /connect in group')
+    await message.reply(f"🗑 Removed: `{chat_id}`")
 
 @Client.on_message(filters.command('img_2_link'))
 async def img_2_link(bot, message):
@@ -635,7 +568,7 @@ async def confirm_payment_handler(client, query):
         user_info = await client.get_users(user_id)
         await client.send_message(LOG_CHANNEL, f"#Premium_Added (Payment)\n\n👤 <b>User:</b> {user_info.mention} (`{user_id}`)\n🗓 <b>Plan:</b> {final_days} Days\n⏰ <b>Expires:</b> {ex.strftime('%d/%m/%Y')}\n👮‍♂️ <b>Approved By:</b> {query.from_user.mention}")
         
-        # Delete messages
+        # Delete admin interaction messages
         try: await ask_msg.delete(); await msg.delete()
         except: pass
         
