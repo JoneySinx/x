@@ -1,7 +1,7 @@
 # 🚀 Fast Finder Bot - Premium Auto Filter
 
 <p align="center">
-  <img src="https://graph.org/file/5a676b7337373f0083906.jpg" alt="Fast Finder Bot">
+  <img src="https://n.uguu.se/yMVdwYsB.jpg" alt="Fast Finder Bot">
 </p>
 
 <p align="center">
