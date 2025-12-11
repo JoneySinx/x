@@ -89,7 +89,7 @@ else:
         logger.error('URL is not valid, exiting now')
         exit(1)
 
-# --- OPTIONAL VARIABLES (Fixed: No Error if Missing) ---
+# --- OPTIONAL VARIABLES ---
 
 SUPPORT_GROUP_STR = environ.get('SUPPORT_GROUP', '')
 SUPPORT_GROUP = int(SUPPORT_GROUP_STR) if SUPPORT_GROUP_STR.lstrip('-').isdigit() else None
@@ -104,7 +104,7 @@ PORT = int(environ.get('PORT', '8080'))
 DATABASE_NAME = environ.get('DATABASE_NAME', "Cluster0")
 COLLECTION_NAME = environ.get('COLLECTION_NAME', 'Files')
 
-# Index Channels (Env Variable - Static)
+# Index Channels
 INDEX_CHANNELS = [int(ch) if ch.lstrip('-').isdigit() else ch for ch in environ.get('INDEX_CHANNELS', '').split()]
 
 SUPPORT_LINK = environ.get('SUPPORT_LINK', 'https://t.me/YourXCloud')
@@ -116,10 +116,10 @@ VERIFY_TUTORIAL = environ.get("VERIFY_TUTORIAL", "https://t.me/YourX")
 PICS = environ.get('PICS', 'https://i.postimg.cc/8C15CQ5y/1.png https://i.postimg.cc/gcNtrv0m/2.png').split()
 
 TIME_ZONE = environ.get('TIME_ZONE', 'Asia/Kolkata')
-DELETE_TIME = int(environ.get('DELETE_TIME', 300)) # 5 Minutes Default
-PM_FILE_DELETE_TIME = int(environ.get('PM_FILE_DELETE_TIME', 43200)) # 12 Hours Default
+DELETE_TIME = int(environ.get('DELETE_TIME', 300))
+PM_FILE_DELETE_TIME = int(environ.get('PM_FILE_DELETE_TIME', 43200))
 CACHE_TIME = int(environ.get('CACHE_TIME', 300))
-MAX_BTN = int(environ.get('MAX_BTN', 10)) # Fixed to 10
+MAX_BTN = int(environ.get('MAX_BTN', 10)) 
 VERIFY_EXPIRE = int(environ.get('VERIFY_EXPIRE', 86400))
 
 # --- FEATURES (Toggles) ---
@@ -136,7 +136,7 @@ LINK_MODE = is_enabled("LINK_MODE", True)
 LANGUAGES = [lang.lower() for lang in environ.get('LANGUAGES', 'hindi english telugu tamil kannada malayalam marathi punjabi').split()]
 QUALITY = [quality.lower() for quality in environ.get('QUALITY', '360p 480p 720p 1080p 1440p 2160p').split()]
 
-# --- DISABLED/REMOVED FEATURES (Kept Variables to prevent Import Errors) ---
+# --- DISABLED/REMOVED FEATURES ---
 IMDB = is_enabled('IMDB', False) 
 SHORTLINK = is_enabled('SHORTLINK', False)
 SHORTLINK_URL = environ.get("SHORTLINK_URL", "")
