@@ -53,20 +53,18 @@ async def pm_search(client, message):
 # --- 🏘️ GROUP SEARCH HANDLER ---
 @Client.on_message(filters.group & filters.text & filters.incoming)
 async def group_search(client, message):
-    # 🛑 SUPPORT GROUP CHECK 🛑
-    # 1. No Search (Ignore Movies)
-    # 2. Auto Delete Links after 5 Minutes (Even for Admins)
-    if message.chat.id == SUPPORT_GROUP:
-        # Check for Links (http, https, www, t.me)
+    # 🛑 SUPPORT GROUP CHECK (List Support) 🛑
+    # 🔥 CHANGE: Check if chat ID is IN the list
+    if message.chat.id in SUPPORT_GROUP:
+        # Auto Delete Links after 5 Minutes
         if re.findall(r'https?://\S+|www\.\S+|t\.me/\S+', message.text):
             async def delete_link():
-                await asyncio.sleep(300) # 5 Minutes Wait
+                await asyncio.sleep(300) # 5 Minutes
                 try: await message.delete()
                 except: pass
             
-            # Run in background (Fire & Forget)
             asyncio.create_task(delete_link())
-        return
+        return # Ignore Search
 
     user_id = message.from_user.id if message.from_user else 0
     
