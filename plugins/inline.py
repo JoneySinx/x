@@ -1,5 +1,5 @@
 import logging
-from hydrogram import Client, emoji, filters
+from hydrogram import Client, filters
 from hydrogram.errors import InvalidQueryType
 from hydrogram.types import (
     InlineQueryResultCachedDocument,
@@ -10,7 +10,7 @@ from hydrogram.types import (
 )
 from database.ia_filterdb import get_search_results
 from utils import is_premium, get_size, temp
-from info import CACHE_TIME, IS_PREMIUM, AUTH_CHANNEL
+from info import CACHE_TIME, IS_PREMIUM
 
 logger = logging.getLogger(__name__)
 
