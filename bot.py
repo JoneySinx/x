@@ -200,10 +200,4 @@ class Bot(Client):
             await asyncio.sleep(60)
 
 if __name__ == "__main__":
-    try:
-        import uvloop
-        uvloop.install()
-    except ImportError:
-        pass
-        
     Bot().run()
