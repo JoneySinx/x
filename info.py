@@ -88,10 +88,10 @@ PORT = int(environ.get('PORT', '8080'))
 # ==============================================================================
 
 IS_PREMIUM = is_enabled('IS_PREMIUM', True)
-PRE_DAY_AMOUNT = int(environ.get('PRE_DAY_AMOUNT', '10'))
-UPI_ID = environ.get("UPI_ID", "")
+PRE_DAY_AMOUNT = int(environ.get('PRE_DAY_AMOUNT', '5'))
+UPI_ID = environ.get("UPI_ID", "YourX@SBI")
 UPI_NAME = environ.get("UPI_NAME", "FastFinder Payment")
-RECEIPT_SEND_USERNAME = environ.get("RECEIPT_SEND_USERNAME", "")
+RECEIPT_SEND_USERNAME = environ.get("RECEIPT_SEND_USERNAME", "@JoneySinx")
 
 # Safety Check for Premium
 if IS_PREMIUM and (not UPI_ID or not RECEIPT_SEND_USERNAME):
