@@ -10,7 +10,6 @@ from info import DATA_DATABASE_URL, DATABASE_NAME, COLLECTION_NAME, MAX_BTN, USE
 
 logger = logging.getLogger(__name__)
 
-# --- Single Database Connection ---
 client = AsyncIOMotorClient(DATA_DATABASE_URL)
 db = client[DATABASE_NAME]
 collection = db[COLLECTION_NAME]
@@ -23,16 +22,12 @@ RE_EXTENSIONS = re.compile(r"\b(mkv|mp4|avi|m4v|webm|flv)\b", flags=re.IGNORECAS
 RE_SPACES = re.compile(r"\s+")
 
 async def create_text_index():
-    """Ensure Text Index Exists"""
     try:
         await collection.create_index([("file_name", TEXT), ("caption", TEXT)], name="file_search_index")
     except Exception as e:
-        logger.warning(f"Index Error (Ignorable): {e}")
+        logger.warning(f"Index Error: {e}")
 
 async def save_file(media):
-    """
-    Save file with Optimized Cleaning.
-    """
     file_id = unpack_new_file_id(media.file_id)
     
     # --- FILENAME CLEANING ---
@@ -41,21 +36,20 @@ async def save_file(media):
     clean_name = RE_SPECIAL.sub(" ", original_name)
     clean_name = RE_USERNAMES.sub("", clean_name)
     clean_name = RE_BRACKETS.sub("", clean_name)
-    # clean_name = RE_EXTENSIONS.sub("", clean_name) # Optional: Uncomment to remove extensions
     clean_name = RE_SPACES.sub(" ", clean_name)
     
-    file_name = clean_name.strip().lower()
+    # 🔥 CHANGE: .lower() -> .title() (For "Iron Man" look)
+    file_name = clean_name.strip().title()
     
     # --- CAPTION CLEANING ---
     original_caption = str(media.caption or "")
-    
     clean_caption = RE_SPECIAL.sub(" ", original_caption)
     clean_caption = RE_USERNAMES.sub("", clean_caption)
     clean_caption = RE_BRACKETS.sub("", clean_caption)
     clean_caption = RE_EXTENSIONS.sub("", clean_caption)
     clean_caption = RE_SPACES.sub(" ", clean_caption)
     
-    file_caption = clean_caption.strip().lower()
+    file_caption = clean_caption.strip() # Keep caption case as is or .lower()
     
     document = {
         '_id': file_id,
@@ -77,12 +71,6 @@ async def save_file(media):
         return 'err'
 
 async def get_search_results(query, max_results=MAX_BTN, offset=0, lang=None):
-    """
-    Hybrid Search:
-    Layer 1: MongoDB Text Search (Fast)
-    Layer 2: Regex Split Search (Reliable Fallback)
-    """
-    
     query = str(query).strip().lower()
     query = RE_SPECIAL.sub(" ", query)
     query = RE_SPACES.sub(" ", query).strip()
@@ -91,7 +79,6 @@ async def get_search_results(query, max_results=MAX_BTN, offset=0, lang=None):
         return [], "", 0
 
     # --- LAYER 1: Text Search ---
-    # We use a separate try-except block here so if it fails, Layer 2 still runs.
     text_results = []
     total_text_results = 0
     text_search_failed = False
@@ -116,15 +103,14 @@ async def get_search_results(query, max_results=MAX_BTN, offset=0, lang=None):
             return text_results, next_offset, total_text_results
             
     except OperationFailure:
-        # Index missing -> Fallback to Regex
         text_search_failed = True
     except Exception as e:
         logger.error(f"Text Search Error: {e}")
         text_search_failed = True
 
     # --- LAYER 2: Regex Search (Fallback) ---
-    # Runs if Text Search found nothing OR failed (missing index)
-    if (total_text_results == 0 or text_search_failed) and offset == 0:
+    # 🔥 FIXED: Added Pagination logic here too!
+    if total_text_results == 0 or text_search_failed:
         try:
             words = query.split()
             if len(words) > 0: 
@@ -146,9 +132,15 @@ async def get_search_results(query, max_results=MAX_BTN, offset=0, lang=None):
                 
                 if total_results_regex > 0:
                     cursor = collection.find(regex_filter).sort('_id', -1)
-                    cursor.limit(max_results)
+                    cursor.skip(offset).limit(max_results) # 🔥 Added SKIP
                     files = [doc async for doc in cursor]
-                    return files, "", total_results_regex
+                    
+                    # 🔥 Calculate Next Offset
+                    next_offset = offset + len(files)
+                    if next_offset >= total_results_regex or len(files) == 0:
+                        next_offset = ""
+                        
+                    return files, next_offset, total_results_regex
         except Exception as e:
             logger.error(f"Regex Search Error: {e}")
             return [], "", 0
@@ -194,7 +186,6 @@ async def db_count_documents():
 async def delete_files(query):
     query = query.strip()
     if not query: return 0
-    # Use regex for deletion to be safer if text index is missing
     filter = {'file_name': {'$regex': query, '$options': 'i'}}
     result1 = await collection.delete_many(filter)
     logger.info(f"🗑️ Deleted {result1.deleted_count} files for query: {query}")
