@@ -7,7 +7,7 @@ from utils import temp
 # लॉगिंग सेटअप
 logger = logging.getLogger(__name__)
 
-# --- HTML TEMPLATE (Netflix Style Dark Theme) ---
+# --- HTML TEMPLATE (With Dark/Light Toggle) ---
 watch_tmplt = """
 <!DOCTYPE html>
 <html lang="en">
@@ -17,7 +17,7 @@ watch_tmplt = """
     <title>{heading}</title>
     <meta property="og:title" content="{heading}">
     <meta property="og:description" content="Watch {file_name} online. Powered by Fast Finder.">
-    <meta property="og:image" content="https://i.ibb.co/M8S0Zzj/live-streaming.png">
+    <meta property="og:image" content="{poster}">
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -25,30 +25,61 @@ watch_tmplt = """
     <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
 
     <style>
+        /* --- CSS VARIABLES (THEMING) --- */
         :root {
+            /* Default Dark Theme */
             --bg-color: #0f0f13;
             --card-bg: #18181b;
             --primary: #e50914;
             --text-main: #ffffff;
             --text-sub: #a1a1aa;
             --border: #27272a;
+            --btn-text: #000000;
+            --btn-hover: #e2e2e2;
+            --tag-bg: rgba(255,255,255,0.1);
         }
 
-        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Outfit', sans-serif; }
+        /* Light Theme Overrides */
+        [data-theme="light"] {
+            --bg-color: #f4f4f5;
+            --card-bg: #ffffff;
+            --text-main: #18181b;
+            --text-sub: #52525b;
+            --border: #e4e4e7;
+            --btn-text: #ffffff; 
+            --btn-hover: #3f3f46;
+            --tag-bg: rgba(0,0,0,0.05);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Outfit', sans-serif; transition: background-color 0.3s, color 0.3s; }
         body { background-color: var(--bg-color); color: var(--text-main); min-height: 100vh; display: flex; flex-direction: column; }
 
         .navbar {
             padding: 1rem 1.5rem;
-            background: rgba(15, 15, 19, 0.95);
-            backdrop-filter: blur(10px);
+            background: var(--card-bg);
             border-bottom: 1px solid var(--border);
             position: sticky;
             top: 0;
             z-index: 100;
             display: flex;
             align-items: center;
+            justify-content: space-between; /* Space for toggle button */
         }
         .brand { font-weight: 700; font-size: 1.25rem; color: var(--primary); text-transform: uppercase; letter-spacing: 1px; }
+
+        /* Theme Toggle Button */
+        .theme-btn {
+            background: none;
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            padding: 8px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .theme-btn:hover { background: var(--tag-bg); }
 
         .main-container {
             flex: 1; width: 100%; max-width: 1000px; margin: 0 auto; padding: 1.5rem;
@@ -59,14 +90,14 @@ watch_tmplt = """
             width: 100%; background: #000; border-radius: 12px; overflow: hidden;
             box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); aspect-ratio: 16/9;
         }
-        video { width: 100%; height: 100%; }
+        video { width: 100%; height: 100%; object-fit: contain; }
 
         .info-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; }
         .file-title { font-size: 1.1rem; font-weight: 600; line-height: 1.5; margin-bottom: 1rem; word-break: break-word; }
 
         .tags { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
-        .tag { background: rgba(255,255,255,0.1); padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 500; color: var(--text-sub); }
-        .tag.hd { background: rgba(229, 9, 20, 0.2); color: #ff4d4d; }
+        .tag { background: var(--tag-bg); padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 500; color: var(--text-sub); }
+        .tag.hd { background: rgba(229, 9, 20, 0.15); color: #ff4d4d; }
 
         .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
         @media (max-width: 640px) { .actions { grid-template-columns: 1fr; } .main-container { padding: 1rem; } }
@@ -76,21 +107,30 @@ watch_tmplt = """
             padding: 0.75rem 1.5rem; border-radius: 8px; font-weight: 600; text-decoration: none;
             transition: all 0.2s ease; font-size: 0.95rem;
         }
-        .btn-primary { background: var(--text-main); color: #000; }
-        .btn-primary:hover { background: #e2e2e2; transform: translateY(-1px); }
-        .btn-secondary { background: rgba(255,255,255,0.1); color: var(--text-main); }
-        .btn-secondary:hover { background: rgba(255,255,255,0.15); }
+        
+        /* Primary Button (Invert colors based on theme) */
+        .btn-primary { background: var(--text-main); color: var(--bg-color); }
+        .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+        
+        .btn-secondary { background: var(--tag-bg); color: var(--text-main); }
+        .btn-secondary:hover { background: var(--border); }
 
         footer { text-align: center; padding: 1.5rem; color: var(--text-sub); font-size: 0.875rem; border-top: 1px solid var(--border); margin-top: auto; }
         .plyr { --plyr-color-main: var(--primary); border-radius: 12px; }
     </style>
 </head>
 <body>
-    <nav class="navbar"><span class="brand">FAST FINDER</span></nav>
+    <nav class="navbar">
+        <span class="brand">FAST FINDER</span>
+        <button class="theme-btn" id="theme-toggle" aria-label="Toggle Theme">
+            <svg id="sun-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+            <svg id="moon-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+        </button>
+    </nav>
 
     <main class="main-container">
         <div class="video-wrapper">
-            <video id="player" playsinline controls preload="metadata">
+            <video id="player" playsinline controls preload="metadata" poster="{poster}">
                 <source src="{src}" type="{mime_type}" />
             </video>
         </div>
@@ -121,10 +161,42 @@ watch_tmplt = """
     <script src="https://cdn.plyr.io/3.7.8/plyr.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
+            // Player Setup
             const player = new Plyr('#player', {
                 controls: ['play-large', 'play', 'progress', 'current-time', 'duration', 'mute', 'volume', 'captions', 'settings', 'pip', 'airplay', 'fullscreen'],
                 settings: ['captions', 'quality', 'speed'],
                 keyboard: { focused: true, global: true },
+            });
+
+            // Theme Toggle Logic
+            const toggleBtn = document.getElementById('theme-toggle');
+            const sunIcon = document.getElementById('sun-icon');
+            const moonIcon = document.getElementById('moon-icon');
+            const html = document.documentElement;
+
+            // Check Saved Theme
+            const currentTheme = localStorage.getItem('theme');
+            if (currentTheme === 'light') {
+                html.setAttribute('data-theme', 'light');
+                sunIcon.style.display = 'none';
+                moonIcon.style.display = 'block';
+            } else {
+                sunIcon.style.display = 'block';
+                moonIcon.style.display = 'none';
+            }
+
+            toggleBtn.addEventListener('click', () => {
+                if (html.getAttribute('data-theme') === 'light') {
+                    html.removeAttribute('data-theme');
+                    localStorage.setItem('theme', 'dark');
+                    sunIcon.style.display = 'block';
+                    moonIcon.style.display = 'none';
+                } else {
+                    html.setAttribute('data-theme', 'light');
+                    localStorage.setItem('theme', 'light');
+                    sunIcon.style.display = 'none';
+                    moonIcon.style.display = 'block';
+                }
             });
         });
     </script>
@@ -151,16 +223,20 @@ async def media_watch(message_id):
         # 3. Stream Link Generation
         base_url = URL[:-1] if URL.endswith('/') else URL
         src = f"{base_url}/download/{message_id}"
+        
+        # 4. Thumbnail Logic
+        poster_url = "https://i.ibb.co/M8S0Zzj/live-streaming.png"
+        if getattr(media, "thumbs", None) or getattr(media, "thumb", None):
+             poster_url = f"{base_url}/thumbnail/{message_id}"
 
-        # 4. Render Template
-        # XSS Protection
+        # 5. Render Template
         safe_heading = html.escape(f'Watch - {file_name}')
         safe_filename = html.escape(file_name)
             
-        # Using .replace() instead of .format() to avoid CSS conflicts
         return watch_tmplt.replace('{heading}', safe_heading) \
                           .replace('{file_name}', safe_filename) \
                           .replace('{src}', src) \
+                          .replace('{poster}', poster_url) \
                           .replace('{mime_type}', mime_type)
 
     except Exception as e:
