@@ -9,3 +9,4 @@ pytz
 requests
 qrcode
 Pillow
+uvloop
