@@ -272,6 +272,10 @@ async def quality_search(client: Client, query: CallbackQuery):
 # --- 🎛️ MAIN CALLBACK HANDLER ---
 @Client.on_callback_query()
 async def cb_handler(client: Client, query: CallbackQuery):
+    # 🔥 ERROR FIX: Check if query.message exists before using it
+    if not query.message:
+        return await query.answer("⚠️ Message not found (too old).", show_alert=True)
+
     if query.data.startswith("close_data"):
         await query.message.delete()
         try: await query.message.reply_to_message.delete()
@@ -399,10 +403,12 @@ async def cb_handler(client: Client, query: CallbackQuery):
         users = await db.total_users_count()
         chats = await db.total_chat_count()
         prm = await db.get_premium_count()
+        
         used_bytes, free_bytes = await db.get_db_size()
         used = get_size(used_bytes)
         free = get_size(free_bytes)
         uptime = get_readable_time(time_now() - temp.START_TIME)
+        
         buttons = [[InlineKeyboardButton('🏄 Back', callback_data='start')]]
         await query.message.edit_text(script.STATUS_TXT.format(files, users, chats, prm, used, free, uptime), reply_markup=InlineKeyboardMarkup(buttons))
 
