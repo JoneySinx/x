@@ -20,6 +20,9 @@ RE_USERNAMES = re.compile(r"@\w+")
 RE_BRACKETS = re.compile(r"[\[\(\{].*?[\]\}\)]")
 RE_EXTENSIONS = re.compile(r"\b(mkv|mp4|avi|m4v|webm|flv)\b", flags=re.IGNORECASE)
 RE_SPACES = re.compile(r"\s+")
+# RE_RESOLUTION is defined but NOT used for substitution (as requested)
+RE_RESOLUTION = re.compile(r'\b\d{3,4}p\b', re.IGNORECASE)
+
 
 async def create_text_index():
     try:
@@ -27,23 +30,29 @@ async def create_text_index():
     except Exception as e:
         logger.warning(f"Index Error: {e}")
 
-# --- SAVE FILE ---
+# --- SAVE FILE (FINAL CLEANING) ---
 async def save_file(media):
     file_id = unpack_new_file_id(media.file_id)
     
-    # Cleaning Logic
+    # 1. Cleaning Filename
     original_name = str(media.file_name or "")
     clean_name = RE_SPECIAL.sub(" ", original_name)
     clean_name = RE_USERNAMES.sub("", clean_name)
     clean_name = RE_BRACKETS.sub("", clean_name)
+    clean_name = RE_EXTENSIONS.sub("", clean_name) 
+    # REMOVED: clean_name = RE_RESOLUTION.sub("", clean_name)
     clean_name = RE_SPACES.sub(" ", clean_name)
-    file_name = clean_name.strip().title()
     
+    # 🔥 FIX: Apply Title Case and specific 'l' replacement during saving
+    file_name = clean_name.strip().title().replace(" L ", " l ")
+    
+    # 2. Cleaning Caption
     original_caption = str(media.caption or "")
     clean_caption = RE_SPECIAL.sub(" ", original_caption)
     clean_caption = RE_USERNAMES.sub("", clean_caption)
     clean_caption = RE_BRACKETS.sub("", clean_caption)
     clean_caption = RE_EXTENSIONS.sub("", clean_caption)
+    # REMOVED: clean_caption = RE_RESOLUTION.sub("", clean_caption)
     clean_caption = RE_SPACES.sub(" ", clean_caption)
     file_caption = clean_caption.strip()
     
@@ -66,7 +75,7 @@ async def save_file(media):
         logger.error(f"❌ Error Saving: {e}")
         return 'err'
 
-# --- UPDATE FILE ---
+# --- UPDATE FILE (EDIT) ---
 async def update_file(media):
     file_id = unpack_new_file_id(media.file_id)
     
@@ -74,14 +83,18 @@ async def update_file(media):
     clean_name = RE_SPECIAL.sub(" ", original_name)
     clean_name = RE_USERNAMES.sub("", clean_name)
     clean_name = RE_BRACKETS.sub("", clean_name)
+    clean_name = RE_EXTENSIONS.sub("", clean_name)
+    # REMOVED: clean_name = RE_RESOLUTION.sub("", clean_name)
     clean_name = RE_SPACES.sub(" ", clean_name)
-    file_name = clean_name.strip().title()
+    # 🔥 FIX: Apply Title Case and specific 'l' replacement during updating
+    file_name = clean_name.strip().title().replace(" L ", " l ")
     
     original_caption = str(media.caption or "")
     clean_caption = RE_SPECIAL.sub(" ", original_caption)
     clean_caption = RE_USERNAMES.sub("", clean_caption)
     clean_caption = RE_BRACKETS.sub("", clean_caption)
     clean_caption = RE_EXTENSIONS.sub("", clean_caption)
+    # REMOVED: clean_caption = RE_RESOLUTION.sub("", clean_caption)
     clean_caption = RE_SPACES.sub(" ", clean_caption)
     file_caption = clean_caption.strip()
     
@@ -100,7 +113,6 @@ async def update_file(media):
         logger.error(f"❌ Error Updating: {e}")
         return 'err'
 
-# --- SEARCH LOGIC ---
 async def get_search_results(query, max_results=MAX_BTN, offset=0, lang=None):
     query = str(query).strip().lower()
     query = RE_SPECIAL.sub(" ", query)
@@ -210,9 +222,7 @@ def unpack_new_file_id(new_file_id):
 async def db_count_documents():
      return await collection.count_documents({})
 
-# --- 🔥 FIXED DELETE FILES LOGIC ---
 async def delete_files(query):
-    # अगर क्वेरी खाली है (Delete All Command), तो सारा डेटा साफ़ कर दें
     if query is None or str(query).strip() == "":
         try:
             result = await collection.delete_many({})
@@ -222,7 +232,6 @@ async def delete_files(query):
             logger.error(f"Delete All Error: {e}")
             return 0
 
-    # अगर क्वेरी दी गई है, तो सिर्फ उसे डिलीट करें
     query = str(query).strip()
     filter = {'file_name': {'$regex': query, '$options': 'i'}}
     
