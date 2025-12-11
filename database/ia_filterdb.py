@@ -18,7 +18,8 @@ collection = db[COLLECTION_NAME]
 RE_SPECIAL = re.compile(r"[\.\+\-_]")
 RE_USERNAMES = re.compile(r"@\w+")
 RE_BRACKETS = re.compile(r"[\[\(\{].*?[\]\}\)]")
-RE_EXTENSIONS = re.compile(r"\b(mkv|mp4|avi|m4v|webm|flv)\b", flags=re.IGNORECASE)
+# Extensions Regex (Case Insensitive)
+RE_EXTENSIONS = re.compile(r"\b(mkv|mp4|avi|m4v|webm|flv|mov|wmv|3gp|mpg|mpeg|hevc)\b", flags=re.IGNORECASE)
 RE_SPACES = re.compile(r"\s+")
 
 async def create_text_index():
@@ -27,18 +28,26 @@ async def create_text_index():
     except Exception as e:
         logger.warning(f"Index Error: {e}")
 
-# --- SAVE FILE (INSERT ONLY) ---
+# --- SAVE FILE (INSERT) ---
 async def save_file(media):
     file_id = unpack_new_file_id(media.file_id)
     
-    # Cleaning Logic
+    # 1. Get Original Name
     original_name = str(media.file_name or "")
-    clean_name = RE_SPECIAL.sub(" ", original_name)
-    clean_name = RE_USERNAMES.sub("", clean_name)
-    clean_name = RE_BRACKETS.sub("", clean_name)
-    clean_name = RE_SPACES.sub(" ", clean_name)
-    file_name = clean_name.strip().title()
     
+    # 2. Apply Cleaning
+    clean_name = RE_SPECIAL.sub(" ", original_name)   # Remove dots/underscores
+    clean_name = RE_USERNAMES.sub("", clean_name)     # Remove usernames
+    clean_name = RE_BRACKETS.sub("", clean_name)      # Remove [...]
+    clean_name = RE_EXTENSIONS.sub("", clean_name)    # 🔥 Remove mp4/mkv
+    clean_name = RE_SPACES.sub(" ", clean_name)       # Remove extra spaces
+    
+    # 3. Format: Title Case + " l " Fix
+    # .title() makes "iron man" -> "Iron Man" but also " l " -> " L "
+    # We replace " L " back to " l "
+    file_name = clean_name.strip().title().replace(" L ", " l ")
+
+    # 4. Clean Caption (Optional: Keep original or clean it too)
     original_caption = str(media.caption or "")
     clean_caption = RE_SPECIAL.sub(" ", original_caption)
     clean_caption = RE_USERNAMES.sub("", clean_caption)
@@ -66,11 +75,8 @@ async def save_file(media):
         logger.error(f"❌ Error Saving: {e}")
         return 'err'
 
-# --- 🔥 NEW: UPDATE FILE (FOR EDITS) ---
+# --- UPDATE FILE (EDIT) ---
 async def update_file(media):
-    """
-    Updates the existing file in Database when edited in Channel.
-    """
     file_id = unpack_new_file_id(media.file_id)
     
     # Same Cleaning Logic as save_file
@@ -78,8 +84,11 @@ async def update_file(media):
     clean_name = RE_SPECIAL.sub(" ", original_name)
     clean_name = RE_USERNAMES.sub("", clean_name)
     clean_name = RE_BRACKETS.sub("", clean_name)
+    clean_name = RE_EXTENSIONS.sub("", clean_name)    # 🔥 Remove mp4/mkv
     clean_name = RE_SPACES.sub(" ", clean_name)
-    file_name = clean_name.strip().title()
+    
+    # Format: Title Case + " l " Fix
+    file_name = clean_name.strip().title().replace(" L ", " l ")
     
     original_caption = str(media.caption or "")
     clean_caption = RE_SPECIAL.sub(" ", original_caption)
@@ -90,7 +99,6 @@ async def update_file(media):
     file_caption = clean_caption.strip()
     
     try:
-        # Update existing document
         await collection.update_one(
             {'_id': file_id},
             {'$set': {
