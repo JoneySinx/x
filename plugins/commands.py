@@ -108,7 +108,8 @@ async def start(client, message):
         
         for file in files:
             CAPTION = settings['caption']
-            f_caption = CAPTION.format(file_name=file['file_name'], file_size=get_size(file['file_size']), file_caption=file['caption'])      
+            # TITLE CASE FIX: .title() added
+            f_caption = CAPTION.format(file_name=file['file_name'].title(), file_size=get_size(file['file_size']), file_caption=file['caption'])      
             btn = [[InlineKeyboardButton('❌ Cʟᴏsᴇ', callback_data='close_data')]]
             if IS_STREAM:
                 btn.insert(0, [InlineKeyboardButton("🚀 Fᴀsᴛ Dᴏᴡɴʟᴏᴀᴅ / Wᴀᴛᴄʜ", callback_data=f"stream#{file['_id']}")])
@@ -140,6 +141,7 @@ async def start(client, message):
         except: pass
         return
 
+    # --- SINGLE FILE HANDLER ---
     try: type_, grp_id, file_id = mc.split("_", 2)
     except ValueError: return await message.reply("❌ Invalid Link")
     
@@ -149,8 +151,10 @@ async def start(client, message):
         
     settings = await get_settings(int(grp_id))
     CAPTION = settings['caption']
-    f_caption = CAPTION.format(file_name = files_['file_name'], file_size = get_size(files_['file_size']), file_caption=files_['caption'])
+    # TITLE CASE FIX: .title() added
+    f_caption = CAPTION.format(file_name = files_['file_name'].title(), file_size = get_size(files_['file_size']), file_caption=files_['caption'])
     
+    # 1. Initial Send (Normal Buttons)
     btn = [[InlineKeyboardButton('❌ Cʟᴏsᴇ', callback_data='close_data')]]
     if IS_STREAM:
         btn.insert(0, [InlineKeyboardButton("🚀 Fᴀsᴛ Dᴏᴡɴʟᴏᴀᴅ / Wᴀᴛᴄʜ", callback_data=f"stream#{file_id}")])
@@ -163,9 +167,22 @@ async def start(client, message):
         reply_markup=InlineKeyboardMarkup(btn)
     )
     
+    # 2. Send Warning Message
     time = get_readable_time(PM_FILE_DELETE_TIME)
     msg = await vp.reply(f"<b>⚠️ Nᴏᴛᴇ:</b> <i>Tʜɪs ғɪʟᴇ ᴡɪʟʟ ʙᴇ ᴅᴇʟᴇᴛᴇᴅ ɪɴ {time}.</i>")
 
+    # 3. 🔥 UPDATE BUTTON TO INCLUDE WARNING ID
+    # This allows pm_filter.py to delete the warning message when Close is clicked
+    new_btn = [[InlineKeyboardButton('❌ Cʟᴏsᴇ', callback_data=f'close_data#{msg.id}')]]
+    if IS_STREAM:
+        new_btn.insert(0, [InlineKeyboardButton("🚀 Fᴀsᴛ Dᴏᴡɴʟᴏᴀᴅ / Wᴀᴛᴄʜ", callback_data=f"stream#{file_id}")])
+    
+    try:
+        await vp.edit_reply_markup(reply_markup=InlineKeyboardMarkup(new_btn))
+    except:
+        pass # Ignore if edit fails (e.g., user blocked bot immediately)
+
+    # 4. Timer Logic
     await asyncio.sleep(PM_FILE_DELETE_TIME)
     try:
         await msg.delete()
@@ -197,7 +214,6 @@ async def delete_all_index(bot, message):
 async def stats(bot, message):
     if message.from_user.id not in ADMINS: return await message.delete()
     
-    # Statistics
     files = await db_count_documents()
     users = await db.total_users_count()
     chats = await db.total_chat_count()
@@ -207,7 +223,6 @@ async def stats(bot, message):
     free = get_size(free_bytes)
     uptime = get_readable_time(time_now() - temp.START_TIME)
     
-    # UI
     text = (
         f"<b>📊 <u>Sʏsᴛᴇᴍ Sᴛᴀᴛɪsᴛɪᴄs</u></b>\n\n"
         f"<b>📂 Tᴏᴛᴀʟ Fɪʟᴇs:</b> {files}\n"
@@ -231,7 +246,7 @@ async def link(bot, message):
         watch = f"{base_url}/watch/{msg.id}"
         download = f"{base_url}/download/{msg.id}"
         btn=[[InlineKeyboardButton("🎬 Wᴀᴛᴄʜ Oɴʟɪɴᴇ", url=watch), InlineKeyboardButton("⚡ Dᴏᴡɴʟᴏᴀᴅ", url=download)],[InlineKeyboardButton('❌ Cʟᴏsᴇ', callback_data='close_data')]]
-        await message.reply(f'<b>🔗 Fɪʟᴇ Lɪɴᴋ Gᴇɴᴇʀᴀᴛᴇᴅ!</b>\n\n<b>📂 Nᴀᴍᴇ:</b> {media.file_name}', reply_markup=InlineKeyboardMarkup(btn))
+        await message.reply(f'<b>🔗 Fɪʟᴇ Lɪɴᴋ Gᴇɴᴇʀᴀᴛᴇᴅ!</b>\n\n<b>📂 Nᴀᴍᴇ:</b> {media.file_name.title()}', reply_markup=InlineKeyboardMarkup(btn))
     except Exception as e: await message.reply(f'Error: {e}')
 
 @Client.on_message(filters.command('index_channels'))
