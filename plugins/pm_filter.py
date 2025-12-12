@@ -2,26 +2,22 @@ import asyncio
 import re
 import math
 import logging
-import qrcode
-import os
 import urllib.parse
-from time import time as time_now
-from hydrogram.errors import ListenerTimeout, MessageNotModified
 from datetime import datetime
 from info import (
     IS_PREMIUM, PRE_DAY_AMOUNT, RECEIPT_SEND_USERNAME, UPI_ID, UPI_NAME,
     ADMINS, MAX_BTN, BIN_CHANNEL, IS_STREAM, DELETE_TIME, 
     FILMS_LINK, LOG_CHANNEL, SUPPORT_GROUP, UPDATES_LINK, QUALITY
 )
-from hydrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, InputMediaPhoto
+from hydrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from hydrogram import Client, filters, enums
+from hydrogram.errors import MessageNotModified, ListenerTimeout
 from utils import (
     is_premium, get_size, is_subscribed, is_check_admin, get_wish, 
     get_readable_time, temp, get_settings, save_group_settings
 )
 from database.users_chats_db import db
 from database.ia_filterdb import get_search_results, delete_files, db_count_documents
-from plugins.commands import get_grp_stg
 from Script import script
 
 logger = logging.getLogger(__name__)
@@ -29,7 +25,7 @@ logger = logging.getLogger(__name__)
 BUTTONS = {}
 CAP = {}
 
-# --- 🔥 COMPILED REGEX FOR EXTENSIONS ---
+# --- 🔥 COMPILED REGEX ---
 EXT_PATTERN = re.compile(r"\b(mkv|mp4|avi|m4v|webm|flv|mov|wmv|3gp|mpg|mpeg)\b", re.IGNORECASE)
 
 # --- 🔍 PM SEARCH HANDLER ---
@@ -53,36 +49,36 @@ async def pm_search(client, message):
 # --- 🏘️ GROUP SEARCH HANDLER ---
 @Client.on_message(filters.group & filters.text & filters.incoming)
 async def group_search(client, message):
-    # 🛑 SUPPORT GROUP CHECK (No Search + Auto Delete Links) 🛑
-    # Debugging: Ensure IDs are Integers for comparison
+    
+    # 🛑 1. SUPPORT GROUP CHECK (Fixed Logic) 🛑
+    # हम दोनों IDs को Integer (Number) में बदलकर मैच करेंगे
     try:
         current_chat_id = int(message.chat.id)
+        # अगर SUPPORT_GROUP सेट नहीं है तो 0 मान लो
         support_chat_id = int(SUPPORT_GROUP) if SUPPORT_GROUP else 0
     except:
-        current_chat_id = message.chat.id
         support_chat_id = 0
+        current_chat_id = message.chat.id
 
-    # LOGGING (Check your Console to see if IDs match)
-    # logger.info(f"Checking Group: {current_chat_id} vs Support: {support_chat_id}") 
-
+    # अगर यह सपोर्ट ग्रुप है:
     if support_chat_id != 0 and current_chat_id == support_chat_id:
-        # Link Delete Logic (5 Minutes)
+        # A. लिंक चेक करो और डिलीट करो
         if re.findall(r'https?://\S+|www\.\S+|t\.me/\S+', message.text):
-            # logger.info("🔗 Link Detected in Support Group! Deleting in 5 mins...")
             async def delete_link():
-                await asyncio.sleep(300) # 5 Minutes Wait
+                await asyncio.sleep(300) # 5 मिनट का इंतज़ार
                 try: await message.delete()
                 except: pass
             asyncio.create_task(delete_link())
         
-        # STOP SEARCH (Return immediately)
-        return
+        # B. सबसे ज़रूरी: यहीं रुक जाओ (Return). आगे सर्च मत करो।
+        return 
 
+    # --- 2. PREMIUM CHECK ---
     user_id = message.from_user.id if message.from_user else 0
-    
     if not await is_premium(user_id, client):
         return
 
+    # --- 3. AUTO FILTER LOGIC ---
     stg = await db.get_bot_sttgs()
     if not stg: stg = {'AUTO_FILTER': True}
         
@@ -141,7 +137,6 @@ async def next_page(bot, query):
         f_name = EXT_PATTERN.sub("", file['file_name'])
         f_name = re.sub(r"\s+", " ", f_name).strip()
         f_name = f_name.title().replace(" L ", " l ")
-        
         files_link += f"""\n\n<b>{index}. <a href=https://t.me/{temp.U_NAME}?start=file_{query.message.chat.id}_{file['_id']}>[{get_size(file['file_size'])}] {f_name}</a></b>"""
 
     btn = []
@@ -176,7 +171,7 @@ async def next_page(bot, query):
     except MessageNotModified:
         pass
 
-# --- 🔄 AUTO FILTER LOGIC ---
+# --- 🔄 AUTO FILTER FUNCTION ---
 async def auto_filter(client, msg, s, spoll=False):
     message = msg
     settings = await get_settings(message.chat.id)
@@ -204,7 +199,6 @@ async def auto_filter(client, msg, s, spoll=False):
         f_name = EXT_PATTERN.sub("", file['file_name'])
         f_name = re.sub(r"\s+", " ", f_name).strip()
         f_name = f_name.title().replace(" L ", " l ")
-        
         files_link += f"""\n\n<b>{index}. <a href=https://t.me/{temp.U_NAME}?start=file_{message.chat.id}_{file['_id']}>[{get_size(file['file_size'])}] {f_name}</a></b>"""
     
     btn = []
@@ -282,7 +276,6 @@ async def quality_search(client: Client, query: CallbackQuery):
         f_name = EXT_PATTERN.sub("", file['file_name'])
         f_name = re.sub(r"\s+", " ", f_name).strip()
         f_name = f_name.title().replace(" L ", " l ")
-        
         files_link += f"""\n\n<b>{index}. <a href=https://t.me/{temp.U_NAME}?start=file_{query.message.chat.id}_{file['_id']}>[{get_size(file['file_size'])}] {f_name}</a></b>"""
 
     btn = []
@@ -461,22 +454,17 @@ async def cb_handler(client: Client, query: CallbackQuery):
         await query.answer(url=f"https://t.me/{temp.U_NAME}?start={mc}")
         await query.message.delete()
     
-    # --- 🗑️ DELETE HANDLERS ---
     elif query.data == "delete_all":
-        try:
-            await query.message.edit("<b>🗑️ Dᴇʟᴇᴛɪɴɢ Aʟʟ Fɪʟᴇs...</b>\n<i>This may take a while.</i>")
+        try: await query.message.edit("<b>🗑️ Dᴇʟᴇᴛɪɴɢ Aʟʟ Fɪʟᴇs...</b>\n<i>This may take a while.</i>")
         except MessageNotModified: pass
         total = await delete_files("") 
-        try:
-            await query.message.edit(f"<b>✅ Dᴇʟᴇᴛᴇᴅ {total} Fɪʟᴇs ғʀᴏᴍ Dᴀᴛᴀʙᴀsᴇ.</b>")
+        try: await query.message.edit(f"<b>✅ Dᴇʟᴇᴛᴇᴅ {total} Fɪʟᴇs ғʀᴏᴍ Dᴀᴛᴀʙᴀsᴇ.</b>")
         except MessageNotModified: pass
 
     elif query.data.startswith("delete_"):
         _, query_ = query.data.split("_", 1)
-        try:
-            await query.message.edit(f"<b>🗑️ Dᴇʟᴇᴛɪɴɢ Fɪʟᴇs Mᴀᴛᴄʜɪɴɢ:</b> <code>{query_}</code>...")
+        try: await query.message.edit(f"<b>🗑️ Dᴇʟᴇᴛɪɴɢ Fɪʟᴇs Mᴀᴛᴄʜɪɴɢ:</b> <code>{query_}</code>...")
         except MessageNotModified: pass
         total = await delete_files(query_)
-        try:
-            await query.message.edit(f"<b>✅ Dᴇʟᴇᴛᴇᴅ {total} Fɪʟᴇs Mᴀᴛᴄʜɪɴɢ '{query_}'</b>")
+        try: await query.message.edit(f"<b>✅ Dᴇʟᴇᴛᴇᴅ {total} Fɪʟᴇs Mᴀᴛᴄʜɪɴɢ '{query_}'</b>")
         except MessageNotModified: pass
