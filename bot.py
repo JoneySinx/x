@@ -200,4 +200,15 @@ class Bot(Client):
             await asyncio.sleep(60)
 
 if __name__ == "__main__":
+    # --- 🔥 UVLOOP INTEGRATION (Safe Mode) ---
+    if platform.system() != "Windows":
+        try:
+            import uvloop
+            uvloop.install()
+            logging.info("⚡ uvloop initialized! Bot speed increased.")
+        except ImportError:
+            logging.warning("⚠️ uvloop not found in requirements. Running on default asyncio.")
+        except Exception as e:
+            logging.error(f"⚠️ Could not install uvloop: {e}")
+            
     Bot().run()
