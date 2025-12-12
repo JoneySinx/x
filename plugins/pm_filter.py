@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 BUTTONS = {}
 CAP = {}
 
-# --- 🔥 COMPILED REGEX (Extension Removal) ---
+# --- 🔥 COMPILED REGEX ---
 EXT_PATTERN = re.compile(r"\b(mkv|mp4|avi|m4v|webm|flv|mov|wmv|3gp|mpg|mpeg)\b", re.IGNORECASE)
 
 # --- 🔍 PM SEARCH HANDLER ---
@@ -39,41 +39,43 @@ async def pm_search(client, message):
     s = await message.reply(f"<b>🔍 Sᴇᴀʀᴄʜɪɴɢ... Pʟᴇᴀsᴇ Wᴀɪᴛ ✋</b>", quote=True, parse_mode=enums.ParseMode.HTML)
     await auto_filter(client, message, s)
 
-# --- 🏘️ GROUP SEARCH HANDLER (MAIN FIX HERE) ---
+# --- 🏘️ GROUP SEARCH HANDLER (CRASH FIXED) ---
 @Client.on_message(filters.group & filters.text & filters.incoming)
 async def group_search(client, message):
     
-    # 🛑 1. SUPPORT GROUP CHECK (Strict Integer Matching) 🛑
-    # यह कोड सबसे ऊपर है, ताकि एडमिन चेक से पहले ही रन हो जाए।
+    # 🛑 1. SUPPORT GROUP CHECK (List/Int Fix) 🛑
     try:
-        # दोनों IDs को Integer (Number) में बदलो ताकि गलती न हो
         current_chat_id = int(message.chat.id)
-        # अगर SUPPORT_GROUP खाली है तो उसे 0 मान लो
-        config_support_id = int(SUPPORT_GROUP) if SUPPORT_GROUP else 0
         
-        # DEBUG: कंसोल में देखो कि क्या ID मैच हो रही है (Redeploy के बाद Logs चेक करना)
-        # print(f"DEBUG CHECK: Current Group: {current_chat_id} vs Config Support: {config_support_id}")
-
+        # 🔥 FIX: Check if SUPPORT_GROUP is a List or Int/Str
+        if isinstance(SUPPORT_GROUP, list):
+            # अगर लिस्ट है ([-100xyz]), तो पहला आइटम लो
+            config_support_id = int(SUPPORT_GROUP[0])
+        elif SUPPORT_GROUP:
+            # अगर नंबर या स्ट्रिंग है
+            config_support_id = int(SUPPORT_GROUP)
+        else:
+            config_support_id = 0
+        
+        # Support Group Match
         if config_support_id != 0 and current_chat_id == config_support_id:
-            # A. लिंक चेक (Admin हो या User, लिंक 5 मिनट में डिलीट होगा)
-            # यहाँ हम एडमिन चेक नहीं लगा रहे, ताकि एडमिन का लिंक भी डिलीट हो जाए।
             if re.findall(r'https?://\S+|www\.\S+|t\.me/\S+', message.text):
                 async def delete_link():
-                    await asyncio.sleep(300) # 300 सेकंड = 5 मिनट
+                    await asyncio.sleep(300) 
                     try: await message.delete()
                     except: pass
                 asyncio.create_task(delete_link())
-            
-            # B. RETURN: यहाँ से वापस जाओ। आगे सर्च का कोड रन ही नहीं होगा।
-            return 
+            return # STOP SEARCH
 
     except Exception as e:
-        logger.error(f"Support Group Check Error: {e}")
+        # अगर अभी भी कोई एरर आया तो उसे लॉग करो पर बॉट बंद मत करो
+        logger.error(f"Support Group Check Logic Error: {e}")
 
-    # --- 2. NORMAL GROUP SEARCH LOGIC ---
+    # --- 2. PREMIUM CHECK ---
     user_id = message.from_user.id if message.from_user else 0
     if not await is_premium(user_id, client): return
 
+    # --- 3. AUTO FILTER LOGIC ---
     stg = await db.get_bot_sttgs()
     if not stg: stg = {'AUTO_FILTER': True}
         
@@ -83,7 +85,6 @@ async def group_search(client, message):
             if await is_check_admin(client, message.chat.id, message.from_user.id): return
             return
 
-        # Normal Group Link Check (Only deletes if NOT Admin)
         if re.findall(r'https?://\S+|www\.\S+|t\.me/\S+|@\w+', message.text):
             if await is_check_admin(client, message.chat.id, message.from_user.id): return
             try: await message.delete()
@@ -96,7 +97,6 @@ async def group_search(client, message):
             await message.reply_text("<b>✅ Rᴇǫᴜᴇsᴛ Sᴇɴᴛ Sᴜᴄᴄᴇssғᴜʟʟʏ!</b>")
             return  
         
-        # Search Trigger
         s = await message.reply(f"<b>🔍 Sᴇᴀʀᴄʜɪɴɢ... Pʟᴇᴀsᴇ Wᴀɪᴛ ✋</b>", parse_mode=enums.ParseMode.HTML)
         await auto_filter(client, message, s)
     else:
@@ -165,7 +165,7 @@ async def next_page(bot, query):
     except MessageNotModified:
         pass
 
-# --- 🔄 AUTO FILTER LOGIC ---
+# --- 🔄 AUTO FILTER FUNCTION ---
 async def auto_filter(client, msg, s, spoll=False):
     message = msg
     settings = await get_settings(message.chat.id)
@@ -196,6 +196,7 @@ async def auto_filter(client, msg, s, spoll=False):
         files_link += f"""\n\n<b>{index}. <a href=https://t.me/{temp.U_NAME}?start=file_{message.chat.id}_{file['_id']}>[{get_size(file['file_size'])}] {f_name}</a></b>"""
     
     btn = []
+    
     btn.insert(0, [
         InlineKeyboardButton("♻️ Sᴇɴᴅ Aʟʟ", url=f"https://t.me/{temp.U_NAME}?start=all_{message.chat.id}_{key}"),
         InlineKeyboardButton("⚙️ Qᴜᴀʟɪᴛʏ", callback_data=f"quality#{key}#{req}#0")
@@ -312,7 +313,12 @@ async def cb_handler(client, query):
         base_url = SITE_URL[:-1] if SITE_URL.endswith('/') else SITE_URL
         watch = f"{base_url}/watch/{msg.id}"
         download = f"{base_url}/download/{msg.id}"
-        btn=[[InlineKeyboardButton("🎬 Wᴀᴛᴄʜ Oɴʟɪɴᴇ", url=watch), InlineKeyboardButton("⚡ Fᴀsᴛ Dᴏᴡɴʟᴏᴀᴅ", url=download)],[InlineKeyboardButton('❌ Cʟᴏsᴇ', callback_data='close_data')]]
+        btn=[[
+            InlineKeyboardButton("🎬 Wᴀᴛᴄʜ Oɴʟɪɴᴇ", url=watch),
+            InlineKeyboardButton("⚡ Fᴀsᴛ Dᴏᴡɴʟᴏᴀᴅ", url=download)
+        ],[
+            InlineKeyboardButton('❌ Cʟᴏsᴇ', callback_data='close_data')
+        ]]
         await query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup(btn))
 
     elif query.data == 'activate_plan':
