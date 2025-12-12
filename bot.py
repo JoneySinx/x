@@ -142,73 +142,51 @@ class Bot(Client):
                         btn = InlineKeyboardMarkup([[InlineKeyboardButton("💎 Aᴄᴛɪᴠᴇ Pʟᴀɴ Nᴏᴡ", callback_data="activate_plan")]])
                         msg_text = None
                         
-                        # --- REMINDER LOGIC (With Dynamic Emojis) ---
-                        
-                        # 12 Hours Left
+                        # --- REMINDER LOGIC ---
                         if 43200 <= seconds < 43260:
                             msg_text = f"<b>🕛 Pʀᴇᴍɪᴜᴍ Exᴘɪʀɪɴɢ Sᴏᴏɴ!</b>\n\nYour premium plan expires in <b>12 Hours</b>.\n📅 <b>Expiry:</b> <code>{expiry_str}</code>"
-                        
-                        # 6 Hours Left
                         elif 21600 <= seconds < 21660:
                             msg_text = f"<b>🕕 Pʀᴇᴍɪᴜᴍ Exᴘɪʀɪɴɢ Sᴏᴏɴ!</b>\n\nYour premium plan expires in <b>6 Hours</b>.\n📅 <b>Expiry:</b> <code>{expiry_str}</code>"
-                            
-                        # 3 Hours Left
                         elif 10800 <= seconds < 10860:
                             msg_text = f"<b>🕒 Pʀᴇᴍɪᴜᴍ Exᴘɪʀɪɴɢ Sᴏᴏɴ!</b>\n\nYour premium plan expires in <b>3 Hours</b>.\n📅 <b>Expiry:</b> <code>{expiry_str}</code>"
-                            
-                        # 1 Hour Left
                         elif 3600 <= seconds < 3660:
                             msg_text = f"<b>🕐 Pʀᴇᴍɪᴜᴍ Exᴘɪʀɪɴɢ Sᴏᴏɴ!</b>\n\nYour premium plan expires in <b>1 Hour</b>.\n📅 <b>Expiry:</b> <code>{expiry_str}</code>"
-                            
-                        # 10 Minutes Left
                         elif 600 <= seconds < 660:
                             msg_text = f"<b>⚠️ Hᴜʀʀʏ Uᴘ!</b>\n\nYour premium plan expires in just <b>10 Minutes</b>.\n📅 <b>Expiry:</b> <code>{expiry_str}</code>"
-                            
-                        # Expired (<= 0)
                         elif seconds <= 0:
                             msg_text = f"<b>🚫 Pʀᴇᴍɪᴜᴍ Exᴘɪʀᴇᴅ!</b>\n\nYour plan expired on <b>{expiry_str}</b>.\n<i>Renew now to continue enjoying exclusive features.</i>"
-                            # Reset in DB
                             await db.update_plan(user_id, {'expire': '', 'trial': False, 'plan': '', 'premium': False})
                         
                         if msg_text:
-                            # --- AUTO DELETE OLD REMINDER ---
                             old_msg_id = temp.PREMIUM_REMINDERS.get(user_id)
                             if old_msg_id:
-                                try:
-                                    await self.delete_messages(user_id, old_msg_id)
-                                except Exception:
-                                    pass 
-                            
-                            # --- SEND NEW REMINDER ---
+                                try: await self.delete_messages(user_id, old_msg_id)
+                                except: pass 
                             try:
                                 sent_msg = await self.send_message(chat_id=user_id, text=msg_text, reply_markup=btn)
                                 temp.PREMIUM_REMINDERS[user_id] = sent_msg.id
-                                
-                                # Clear cache if expired
-                                if seconds <= 0:
-                                    temp.PREMIUM_REMINDERS.pop(user_id, None)
-                                    
+                                if seconds <= 0: temp.PREMIUM_REMINDERS.pop(user_id, None)
                             except Exception as e:
                                 logging.error(f"Could not send reminder to {user_id}: {e}")
-                                
                     except Exception as e:
                         logging.error(f"Error checking user {user.get('id')}: {e}")
-                        
             except Exception as e:
                 logging.error(f"Error in premium checker loop: {e}")
-            
             await asyncio.sleep(60)
 
 if __name__ == "__main__":
-    # --- 🔥 UVLOOP INTEGRATION (Safe Mode) ---
+    # --- 🔥 UVLOOP FIX ---
     if platform.system() != "Windows":
         try:
             import uvloop
             uvloop.install()
-            logging.info("⚡ uvloop initialized! Bot speed increased.")
+            # मैनुअल रूप से लूप सेट करें ताकि 'get_event_loop' एरर न दे
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            logging.info("⚡ uvloop initialized with new loop!")
         except ImportError:
-            logging.warning("⚠️ uvloop not found in requirements. Running on default asyncio.")
+            logging.warning("⚠️ uvloop not installed.")
         except Exception as e:
-            logging.error(f"⚠️ Could not install uvloop: {e}")
-            
+            logging.error(f"⚠️ uvloop error: {e}")
+
     Bot().run()
